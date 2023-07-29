@@ -1,11 +1,13 @@
 import tkinter
 import customtkinter
-import os
-from pytube import YouTube
 from moviepy.editor import *
 from pydub import AudioSegment
-import threading
 from tkinter import ttk
+import re
+from pytube import YouTube
+from pytube.exceptions import RegexMatchError
+import shutil
+
 
 def mp4(link, save_path=None):
     try:
@@ -28,6 +30,10 @@ def mp4(link, save_path=None):
     except Exception as e:
         print("Error:", e)
 
+def clean_filename(filename):
+    # Remove invalid characters from the filename
+    return re.sub(r'[\\/:*?"<>|]', '', filename)
+
 def mp3(link, save_path=None):
     try:
         # Create a YouTube object
@@ -42,31 +48,32 @@ def mp3(link, save_path=None):
 
         # Set the default save path if not provided
         if save_path is None:
-            save_path = "downloads/" + yt.title
+            save_path = os.path.join(os.path.expanduser("~"), "Downloads")
 
-        # Create the directory if it doesn't exist
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
+        # Create the temporary directory if it doesn't exist
+        temp_dir = os.path.join(save_path, "temp")
+        os.makedirs(temp_dir, exist_ok=True)
 
-        # Download the video to the specified path
-        video_path = os.path.join(save_path, yt.title + ".mp4")
-        stream.download(output_path=save_path)
+        # Download the video to the temporary directory
+        video_filename = "Video.mp4"
+        video_path = os.path.join(temp_dir, video_filename)
+        print("Downloading video to:", video_path)
+        stream.download(output_path=temp_dir, filename="Video.mp4")
 
         # Check if the video file was downloaded successfully
         if not os.path.exists(video_path):
             raise FileNotFoundError("Video file not found. Download failed.")
 
-        # Convert video to audio using pydub
-        audio_path = os.path.join(save_path, yt.title + ".mp3")
-        audio = AudioSegment.from_file(video_path, format="mp4")
-        audio.export(audio_path, format="mp3")
+        # Convert video to audio using ffmpeg
+        audio_filename = clean_filename(yt.title) + ".mp3"
+        audio_path = os.path.join(save_path, audio_filename)
+        print("Converting to MP3...")
+        os.system(f'ffmpeg -i "{video_path}" -vn -acodec libmp3lame -ac 2 -ab 160k -ar 44100 "{audio_path}"')
 
         # Clean up
-        os.remove(video_path)
+        shutil.rmtree(temp_dir)
 
         print("Download and conversion complete! MP3 saved at:", audio_path)
-    except FileNotFoundError as fnf_error:
-        print(fnf_error)
     except Exception as e:
         print("Error:", e)
 
